@@ -2,7 +2,6 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const jwt = require("jsonwebtoken");
-require("./stripe/product");
 
 require("./stripe/product");
 const authenticateToken = require("./middleware/authenticatetoken");
@@ -11,6 +10,8 @@ const {
   createNewProduct,
   ProductValidationSchema,
 } = require("./stripe/product");
+
+const { PriceValidationSchema, createPriceObject } = require("./stripe/price");
 
 app.use(express.json());
 
@@ -41,9 +42,9 @@ const usersList = [
  * body { product } // see product.js for the schema
  */
 app.post(
-  "/api/v1/products/",
+  "/api/v1/prices/",
   /*authenticateToken*/ (req, res) => {
-    const result = ProductValidationSchema.validate(req.body);
+    const result = PriceValidationSchema.validate(req.body);
     if (result.error) {
       res
         .status(400)
@@ -56,20 +57,41 @@ app.post(
 
     //todo : handling properly any stripe error
     try {
-      createNewProduct({
-        name: req.body.name,
-        active: req.body.active,
-        description: req.body.description,
-        images: req.body.images,
-        livemode: req.body.livemode,
-        shippable: req.body.shippable,
-        package_dimensions: req.body.package_dimensions,
-        statement_descriptor: req.body.statement_descriptor,
-        metadata: req.body.metadata,
-        tax_code: req.body.tax_code,
-        unit_label: req.body.unit_label,
-        url: req.body.url,
+      //stripe
+      createPriceObject({
+        unit_amount: req.body.unit_amount,
+        currency: req.body.currency,
+        recurring: req.body.recurring,
+        product: req.body.product, //product key like  prod_LcWzJysKIf9iCL
       });
+    } catch (error) {
+      res
+        .status(500)
+        .send({ error: { message: "Remote Stripe Error " + error.message } });
+    }
+  }
+);
+
+/**
+ * Create a new product
+ */
+app.post(
+  "/api/v1/products/",
+  /*authenticateToken*/ (req, res) => {
+    const result = ProductValidationSchema.validate(req.body);
+    if (result.error) {
+      res
+        .status(400)
+        .send(
+          "Bad request " +
+            result.error.details[0].message +
+            "\n Your request: \n" +
+            JSON.stringify(req.body)
+        ); //it be great show all errors, not just the first
+    }
+
+    //todo : handling properly any stripe error
+    try {
     } catch (error) {
       res
         .status(500)
